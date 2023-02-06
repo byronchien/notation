@@ -26,6 +26,13 @@ type verifyOpts struct {
 	reference    string
 	pluginConfig []string
 	userMetadata []string
+	outputFormat string
+}
+
+type verifyOutput struct {
+	Reference    string            `json:"reference"`
+	UserMetadata map[string]string `json:"userMetadata"`
+	Result       string            `json:"result"`
 }
 
 func verifyCommand(opts *verifyOpts) *cobra.Command {
@@ -60,6 +67,7 @@ Example - Verify a signature on an OCI artifact identified by a tag  (Notation w
 	opts.SecureFlagOpts.ApplyFlags(command.Flags())
 	command.Flags().StringArrayVarP(&opts.pluginConfig, "plugin-config", "c", nil, "{key}={value} pairs that are passed as it is to a plugin, if the verification is associated with a verification plugin, refer plugin documentation to set appropriate values")
 	cmd.SetPflagUserMetadata(command.Flags(), &opts.userMetadata, cmd.PflagUserMetadataVerifyUsage)
+	cmd.SetPflagOutput(command.Flags(), &opts.outputFormat, cmd.PflagOutputUsage)
 	return command
 }
 
@@ -76,8 +84,10 @@ func runVerify(command *cobra.Command, opts *verifyOpts) error {
 
 	// resolve the given reference and set the digest
 	ref, err := resolveReference(command.Context(), &opts.SecureFlagOpts, reference, sigRepo, func(ref registry.Reference, manifestDesc ocispec.Descriptor) {
-		fmt.Printf("Resolved artifact tag `%s` to digest `%s` before verification.\n", ref.Reference, manifestDesc.Digest.String())
-		fmt.Println("Warning: The resolved digest may not point to the same signed artifact, since tags are mutable.")
+		if opts.outputFormat == ioutil.OutputPlaintext {
+			fmt.Printf("Resolved artifact tag `%s` to digest `%s` before verification.\n", ref.Reference, manifestDesc.Digest.String())
+			fmt.Println("Warning: The resolved digest may not point to the same signed artifact, since tags are mutable.")
+		}
 	})
 	if err != nil {
 		return err
@@ -99,6 +109,10 @@ func runVerify(command *cobra.Command, opts *verifyOpts) error {
 	userMetadata, err := cmd.ParseFlagMap(opts.userMetadata, cmd.PflagUserMetadata.Name)
 	if err != nil {
 		return err
+	}
+
+	if opts.outputFormat != ioutil.OutputJson && opts.outputFormat != ioutil.OutputPlaintext {
+		return fmt.Errorf("unrecognized output format: %v", opts.outputFormat)
 	}
 
 	verifyOpts := notation.RemoteVerifyOptions{
@@ -130,16 +144,13 @@ func runVerify(command *cobra.Command, opts *verifyOpts) error {
 		if result.Error != nil {
 			// at this point, the verification action has to be logged and
 			// it's failed
-			fmt.Printf("Warning: %v was set to %q and failed with error: %v\n", result.Type, result.Action, result.Error)
+			if opts.outputFormat == ioutil.OutputPlaintext {
+				fmt.Printf("Warning: %v was set to %q and failed with error: %v\n", result.Type, result.Action, result.Error)
+			}
 		}
 	}
-	if reflect.DeepEqual(outcome.VerificationLevel, trustpolicy.LevelSkip) {
-		fmt.Println("Trust policy is configured to skip signature verification for", ref.String())
-	} else {
-		fmt.Println("Successfully verified signature for", ref.String())
-		printMetadataIfPresent(outcome)
-	}
-	return nil
+
+	return printResult(opts.outputFormat, ref.String(), outcome)
 }
 
 func resolveReference(ctx context.Context, opts *SecureFlagOpts, reference string, sigRepo notationregistry.Repository, fn func(registry.Reference, ocispec.Descriptor)) (registry.Reference, error) {
@@ -161,12 +172,30 @@ func resolveReference(ctx context.Context, opts *SecureFlagOpts, reference strin
 	return ref, nil
 }
 
-func printMetadataIfPresent(outcome *notation.VerificationOutcome) {
+func printResult(outputFormat, reference string, outcome *notation.VerificationOutcome) error {
+
+	if reflect.DeepEqual(outcome.VerificationLevel, trustpolicy.LevelSkip) {
+		if outputFormat == ioutil.OutputPlaintext {
+			fmt.Println("Trust policy is configured to skip signature verification for", reference)
+			return nil
+		} else {
+			output := verifyOutput{Reference: reference, Result: "Skipped", UserMetadata: map[string]string{}}
+			return ioutil.PrintObjectAsJson(output)
+		}
+	}
+
 	// the signature envelope is parsed as part of verification.
 	// since user metadata is only printed on successful verification,
 	// this error can be ignored
 	metadata, _ := outcome.UserMetadata()
 
+	if outputFormat == ioutil.OutputJson {
+		output := verifyOutput{Reference: reference, Result: "Success", UserMetadata: metadata}
+		return ioutil.PrintObjectAsJson(output)
+	}
+
+	fmt.Println("Successfully verified signature for", reference)
 	fmt.Println("\nThe artifact was signed with the following user metadata.")
 	ioutil.PrintMetadataMap(os.Stdout, metadata)
+	return nil
 }

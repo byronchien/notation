@@ -1,11 +1,17 @@
 package ioutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"text/tabwriter"
 
 	"github.com/notaryproject/notation-go/config"
+)
+
+const (
+	OutputPlaintext = "text"
+	OutputJson      = "json"
 )
 
 func newTabWriter(w io.Writer) *tabwriter.Writer {
@@ -42,4 +48,15 @@ func PrintMetadataMap(w io.Writer, metadata map[string]string) error {
 	}
 
 	return tw.Flush()
+}
+
+func PrintObjectAsJson(i interface{}) error {
+	jsonBytes, err := json.MarshalIndent(i, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(jsonBytes))
+
+	return nil
 }
