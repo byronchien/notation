@@ -29,6 +29,17 @@ type verifyOpts struct {
 	outputFormat         string
 }
 
+type signatureVerifyOutput struct {
+	Digest                string            `json:"digest"`
+	UserDefinedAttributes map[string]string `json:"userDefinedAttributes,omitempty"`
+}
+
+type verifyOutput struct {
+	Reference  string `json:"reference"`
+	Signatures []signatureVerifyOutput `json:"signatures,omitempty"`
+	Result     string `json:"result"`
+}
+
 func verifyCommand(opts *verifyOpts) *cobra.Command {
 	if opts == nil {
 		opts = &verifyOpts{
@@ -142,7 +153,7 @@ func runVerify(command *cobra.Command, opts *verifyOpts) error {
 	if err != nil {
 		return err
 	}
-	reportVerificationSuccess(outcomes, resolvedRef)
+	reportVerificationSuccess(outcomes, resolvedRef, opts.outputFormat)
 	return nil
 }
 
@@ -160,7 +171,7 @@ func checkVerificationFailure(outcomes []*notation.VerificationOutcome, printOut
 	return nil
 }
 
-func reportVerificationSuccess(outcomes []*notation.VerificationOutcome, printout string) {
+func reportVerificationSuccess(outcomes []*notation.VerificationOutcome, printout, outputFormat string) {
 	// write out on success
 	outcome := outcomes[0]
 	// print out warning for any failed result with logged verification action
@@ -171,11 +182,23 @@ func reportVerificationSuccess(outcomes []*notation.VerificationOutcome, printou
 			fmt.Fprintf(os.Stderr, "Warning: %v was set to %q and failed with error: %v\n", result.Type, result.Action, result.Error)
 		}
 	}
-	if reflect.DeepEqual(outcome.VerificationLevel, trustpolicy.LevelSkip) {
-		fmt.Println("Trust policy is configured to skip signature verification for", printout)
+	if outputFormat == cmd.OutputJSON {
+		output := verifyOutput{Reference: printout}
+		if reflect.DeepEqual(outcome.VerificationLevel, trustpolicy.LevelSkip) {
+			output.Result = "skipped"
+		} else {
+			output.Result = "success"
+			output.Signatures = []signatureVerifyOutput{formatSignatureOutput(outcome)}
+		}
+
+		ioutil.PrintObjectAsJSON(output)
 	} else {
-		fmt.Println("Successfully verified signature for", printout)
-		printMetadataIfPresent(outcome)
+		if reflect.DeepEqual(outcome.VerificationLevel, trustpolicy.LevelSkip) {
+			fmt.Println("Trust policy is configured to skip signature verification for", printout)
+		} else {
+			fmt.Println("Successfully verified signature for", printout)
+			printMetadataIfPresent(outcome)
+		}
 	}
 }
 
@@ -188,5 +211,14 @@ func printMetadataIfPresent(outcome *notation.VerificationOutcome) {
 	if len(metadata) > 0 {
 		fmt.Println("\nThe artifact was signed with the following user metadata.")
 		ioutil.PrintMetadataMap(os.Stdout, metadata)
+	}
+}
+
+func formatSignatureOutput(outcome *notation.VerificationOutcome) signatureVerifyOutput {
+	metadata, _ := outcome.UserMetadata()
+
+	return signatureVerifyOutput{
+		Digest:                outcome.SignatureDescriptor.Digest.String(),
+		UserDefinedAttributes: metadata,
 	}
 }

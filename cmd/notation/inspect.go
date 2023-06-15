@@ -35,10 +35,10 @@ type inspectOpts struct {
 
 type inspectOutput struct {
 	MediaType  string `json:"mediaType"`
-	Signatures []signatureOutput
+	Signatures []signatureInspectOutput
 }
 
-type signatureOutput struct {
+type signatureInspectOutput struct {
 	MediaType             string              `json:"mediaType"`
 	Digest                string              `json:"digest"`
 	SignatureAlgorithm    string              `json:"signatureAlgorithm"`
@@ -124,7 +124,7 @@ func runInspect(command *cobra.Command, opts *inspectOpts) error {
 	if err != nil {
 		return err
 	}
-	output := inspectOutput{MediaType: manifestDesc.MediaType, Signatures: []signatureOutput{}}
+	output := inspectOutput{MediaType: manifestDesc.MediaType, Signatures: []signatureInspectOutput{}}
 	skippedSignatures := false
 	err = listSignatures(ctx, sigRepo, manifestDesc, opts.maxSignatures, func(sigManifestDesc ocispec.Descriptor) error {
 		sigBlob, sigDesc, err := sigRepo.FetchSignatureBlob(ctx, sigManifestDesc)
@@ -162,7 +162,7 @@ func runInspect(command *cobra.Command, opts *inspectOpts) error {
 			return nil
 		}
 
-		sig := signatureOutput{
+		sig := signatureInspectOutput{
 			MediaType:             sigDesc.MediaType,
 			Digest:                sigManifestDesc.Digest.String(),
 			SignatureAlgorithm:    string(signatureAlgorithm),
