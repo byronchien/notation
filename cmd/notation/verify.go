@@ -26,6 +26,7 @@ type verifyOpts struct {
 	trustPolicyScope     string
 	inputType            inputType
 	maxSignatureAttempts int
+	outputFormat         string
 }
 
 func verifyCommand(opts *verifyOpts) *cobra.Command {
@@ -84,6 +85,7 @@ Example - [Experimental] Verify a signature on an OCI artifact identified by a t
 	cmd.SetPflagUserMetadata(command.Flags(), &opts.userMetadata, cmd.PflagUserMetadataVerifyUsage)
 	command.Flags().IntVar(&opts.maxSignatureAttempts, "max-signatures", 100, "maximum number of signatures to evaluate or examine")
 	cmd.SetPflagReferrersAPI(command.Flags(), &opts.allowReferrersAPI, fmt.Sprintf(cmd.PflagReferrersUsageFormat, "verify"))
+	cmd.SetPflagOutput(command.Flags(), &opts.outputFormat, cmd.PflagOutputUsage)
 	command.Flags().BoolVar(&opts.ociLayout, "oci-layout", false, "[Experimental] verify the artifact stored as OCI image layout")
 	command.Flags().StringVar(&opts.trustPolicyScope, "scope", "", "[Experimental] set trust policy scope for artifact verification, required and can only be used when flag \"--oci-layout\" is set")
 	command.MarkFlagsRequiredTogether("oci-layout", "scope")
@@ -94,6 +96,10 @@ Example - [Experimental] Verify a signature on an OCI artifact identified by a t
 func runVerify(command *cobra.Command, opts *verifyOpts) error {
 	// set log level
 	ctx := opts.LoggingFlagOpts.SetLoggerLevel(command.Context())
+
+	if opts.outputFormat != cmd.OutputJSON && opts.outputFormat != cmd.OutputPlaintext {
+		return fmt.Errorf("unrecognized output format %s", opts.outputFormat)
+	}
 
 	// initialize
 	sigVerifier, err := verifier.NewFromConfig()

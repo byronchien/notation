@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/notaryproject/notation/internal/cmd"
 	"reflect"
 	"testing"
 )
@@ -16,6 +17,7 @@ func TestVerifyCommand_BasicArgs(t *testing.T) {
 		},
 		pluginConfig:         []string{"key1=val1"},
 		maxSignatureAttempts: 100,
+		outputFormat:         cmd.OutputPlaintext,
 	}
 	if err := command.ParseFlags([]string{
 		expected.reference,
@@ -42,12 +44,14 @@ func TestVerifyCommand_MoreArgs(t *testing.T) {
 		},
 		pluginConfig:         []string{"key1=val1", "key2=val2"},
 		maxSignatureAttempts: 100,
+		outputFormat:         cmd.OutputJSON,
 	}
 	if err := command.ParseFlags([]string{
 		expected.reference,
 		"--insecure-registry",
 		"--plugin-config", "key1=val1",
-		"--plugin-config", "key2=val2"}); err != nil {
+		"--plugin-config", "key2=val2",
+		"--output", "json"}); err != nil {
 		t.Fatalf("Parse Flag failed: %v", err)
 	}
 	if err := command.Args(command, command.Flags().Args()); err != nil {
